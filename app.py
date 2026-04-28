@@ -107,24 +107,25 @@ def get_structured_text_from_gemini(api_key: str, raw_text: str):
 
         # 2. Prompt Completo com as Regras ABNT/Etec (VITAL PARA NÃO DAR ERRO)
         prompt = f"""
-        Você é um assistente de formatação acadêmica especialista nas normas ABNT e, principalmente, nas diretrizes institucionais da Etec/Centro Paula Souza. Sua tarefa é analisar o texto bruto fornecido e reestruturá-lo em um formato JSON.
+        Você é um assistente de formatação acadêmica rigoroso, especialista nas normas ABNT e nas diretrizes institucionais da Etec/Centro Paula Souza. 
+        Sua tarefa é converter o texto bruto fornecido em uma estrutura JSON perfeita.
 
-        REGRAS OBRIGATÓRIAS:
-        1. O formato de saída deve ser OBRIGATORIAMENTE um JSON válido contendo uma lista de dicionários.
-        2. Cada dicionário na lista deve ter duas chaves: "tipo" e "texto".
-        3. A chave "tipo" pode ter um dos seguintes valores: "titulo_1", "titulo_2", "paragrafo", "citacao_longa", ou "referencia".
-        4. REGRA INSTITUCIONAL ETEC: Converta todas as chamadas de citação para o sistema autor-data. Ex: (SOBRENOME, ANO, p. XX).
-        5. Identifique citações com mais de 3 linhas e classifique-as como "citacao_longa", sem aspas.
-        6. Identifique a seção de referências bibliográficas. Cada entrada deve ser um item separado com "tipo": "referencia". Ordene alfabeticamente.
+        REGRAS DE CONVERSÃO OBRIGATÓRIAS:
+        1. Formato de saída: OBRIGATORIAMENTE um JSON válido (lista de dicionários contendo "tipo" e "texto").
+        2. Tipos permitidos: "titulo_1", "titulo_2", "paragrafo", "citacao_longa", "referencia".
+        3. CITAÇÕES NO TEXTO (AUTOR-DATA): Os nomes DENTRO dos parênteses devem estar 100% EM MAIÚSCULAS. Exemplo correto: (SCIELO, 2024) ou (SOBRENOME, 2023, p. 15). Errado: (SCiELO, 2024).
+        4. CITAÇÃO LONGA: Trechos copiados com mais de 3 linhas recebem o tipo "citacao_longa", remova as aspas se houver.
+        5. BIBLIOGRAFIA (CRÍTICO): Leia com extrema atenção o final do documento. EXTRAIA ABSOLUTAMENTE TODOS os itens listados (mesmo se estiverem em formato de tabela) e converta-os em "referencia". É estritamente proibido omitir qualquer autor ou obra listada na fonte original.
+        6. Ordene todas as referências da lista final em ordem alfabética.
 
         --- INÍCIO DO TEXTO BRUTO ---
         {raw_text}
         --- FIM DO TEXTO BRUTO ---
         """
 
-        # 3. Trava de Segurança: Obriga o Google a responder EXATAMENTE em formato JSON
+        # 3. Trava de Segurança: Temperatura 0.0 para zero omissão de dados
         configuracao = genai.types.GenerationConfig(
-            temperature=0.1, # Temperatura baixa para a IA não "inventar" coisas
+            temperature=0.0, 
             response_mime_type="application/json"
         )
         
@@ -176,42 +177,51 @@ def create_formatted_docx(data_json: list, template_file=None):
             section.left_margin = Cm(3)
             section.right_margin = Cm(2)
 
+        # === AQUI COMEÇA A LÓGICA ATUALIZADA DA ABNT ===
         for item in data_json:
             tipo = item.get("tipo", "paragrafo")
             texto = item.get("texto", "")
 
+            p = document.add_paragraph()
+            run = p.add_run(texto)
+            run.font.name = 'Arial'
+
             if tipo == "titulo_1":
-                p = document.add_paragraph()
-                run = p.add_run(texto.upper())
-                run.font.name = 'Arial'; run.font.size = Pt(12); run.bold = True
-                p.paragraph_format.space_before = Pt(18); p.paragraph_format.space_after = Pt(6)
-            elif tipo == "titulo_2":
-                p = document.add_paragraph()
-                run = p.add_run(texto)
-                run.font.name = 'Arial'; run.font.size = Pt(12); run.bold = True
-                p.paragraph_format.space_before = Pt(12); p.paragraph_format.space_after = Pt(6)
-            elif tipo == "citacao_longa":
-                p = document.add_paragraph()
-                run = p.add_run(texto)
-                run.font.name = 'Arial'; run.font.size = Pt(10)
-                p.paragraph_format.left_indent = Cm(4); p.paragraph_format.line_spacing = 1.0
-                p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-                p.paragraph_format.space_before = Pt(12); p.paragraph_format.space_after = Pt(12)
-            elif tipo == "referencia":
-                p = document.add_paragraph()
-                run = p.add_run(texto)
-                run.font.name = 'Arial'; run.font.size = Pt(12)
+                run.text = texto.upper() # CORREÇÃO: Aplica o maiúsculo direto no run para não perder o negrito
+                run.bold = True
+                run.font.size = Pt(12)
                 p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                p.paragraph_format.space_before = Pt(12) # ABNT: Espaço antes do título
+                p.paragraph_format.space_after = Pt(12)  # ABNT: Espaço depois do título
+                
+            elif tipo == "titulo_2":
+                run.bold = True
+                run.font.size = Pt(12)
+                p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                p.paragraph_format.space_before = Pt(12)
+                p.paragraph_format.space_after = Pt(12)  # ADICIONADO: Espaço depois do título secundário
+                
+            elif tipo == "citacao_longa":
+                run.font.size = Pt(10)
+                p.paragraph_format.left_indent = Cm(4)
                 p.paragraph_format.line_spacing = 1.0
-                p.paragraph_format.space_after = Pt(12)
-            else:
-                p = document.add_paragraph()
-                run = p.add_run(texto)
-                run.font.name = 'Arial'; run.font.size = Pt(12)
                 p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                p.paragraph_format.space_before = Pt(12) # ADICIONADO: Separa do parágrafo de cima
+                p.paragraph_format.space_after = Pt(12)  # Separa do parágrafo de baixo
+                
+            elif tipo == "referencia":
+                run.font.size = Pt(12)
+                p.paragraph_format.line_spacing = 1.0
+                p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                p.paragraph_format.space_after = Pt(12)
+                
+            else: # paragrafo comum
+                run.font.size = Pt(12)
                 p.paragraph_format.line_spacing = 1.5
+                p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                 p.paragraph_format.first_line_indent = Cm(1.25)
-                p.paragraph_format.space_after = Pt(6)
+                p.paragraph_format.space_after = Pt(0) # ADICIONADO: Trava contra o espaçamento automático do Word
+        # === FIM DA LÓGICA ATUALIZADA DA ABNT ===
 
         doc_io = io.BytesIO()
         document.save(doc_io)
