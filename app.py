@@ -97,7 +97,18 @@ def chunk_text(text, max_chars=15000):
 def get_structured_text_from_gemini(api_key: str, raw_text: str):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-3.1-flash')
+        
+        # --- INÍCIO DA ALTERAÇÃO (SISTEMA DE CONTINGÊNCIA) ---
+        try:
+            # Tenta a Ferrari (Gemini 3)
+            model = genai.GenerativeModel('gemini-3-flash')
+            # Faz um micro-teste silencioso. Se der erro, pula para o 'except'
+            model.generate_content("ping", generation_config={"max_output_tokens": 1})
+        except Exception:
+            # Se a Ferrari falhar, usamos o Fusca Turbinado (Gemini 1.5)
+            # É 100% garantido e estável.
+            model = genai.GenerativeModel('gemini-1.5-pro')
+        # --- FIM DA ALTERAÇÃO ---
 
         prompt = f"""
         Você é um assistente de formatação acadêmica especialista nas normas ABNT e, principalmente, nas diretrizes institucionais da Etec/Centro Paula Souza. Sua tarefa é analisar o texto bruto fornecido e reestruturá-lo em um formato JSON.
