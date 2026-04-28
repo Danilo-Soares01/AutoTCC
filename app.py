@@ -96,52 +96,51 @@ def chunk_text(text, max_chars=15000):
 
 def get_structured_text_from_gemini(api_key: str, raw_text: str):
     try:
+        # 1. Configura a chave de API
         genai.configure(api_key=api_key)
         
-        # --- INÍCIO DA ALTERAÇÃO (SISTEMA DE CONTINGÊNCIA) ---
-        try:
-            # Tenta a Ferrari (Gemini 3)
-            model = genai.GenerativeModel('gemini-3-flash')
-            # Faz um micro-teste silencioso. Se der erro, pula para o 'except'
-            model.generate_content("ping", generation_config={"max_output_tokens": 1})
-        except Exception:
-            # Se a Ferrari falhar, usamos o Fusca Turbinado (Gemini 1.5)
-            # É 100% garantido e estável.
-            model = genai.GenerativeModel('gemini-1.5-pro')
-        # --- FIM DA ALTERAÇÃO ---
+        # --- ETAPA DE AUTODESCOBERTA ---
+        modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        modelo_final = next((m for m in modelos if 'flash' in m.lower()), modelos[0])
+        model = genai.GenerativeModel(modelo_final)
+        # -------------------------------
 
+        # 2. Prompt Completo com as Regras ABNT/Etec (VITAL PARA NÃO DAR ERRO)
         prompt = f"""
         Você é um assistente de formatação acadêmica especialista nas normas ABNT e, principalmente, nas diretrizes institucionais da Etec/Centro Paula Souza. Sua tarefa é analisar o texto bruto fornecido e reestruturá-lo em um formato JSON.
 
         REGRAS OBRIGATÓRIAS:
-        1.  O formato de saída deve ser OBRIGATORIAMENTE um JSON válido contendo uma lista de dicionários.
-        2.  Cada dicionário na lista deve ter duas chaves: "tipo" e "texto".
-        3.  A chave "tipo" pode ter um dos seguintes valores: "titulo_1", "titulo_2", "paragrafo", "citacao_longa", ou "referencia".
-        4.  REGRA INSTITUCIONAL ETEC (PRECEDÊNCIA MÁXIMA): Converta todas as chamadas de citação para o sistema autor-data. Ex: (SOBRENOME, ANO, p. XX).
-        5.  Identifique citações com mais de 3 linhas e classifique-as como "citacao_longa", sem aspas.
-        6.  Identifique a seção de referências bibliográficas. Cada entrada deve ser um item separado com "tipo": "referencia". Ordene a lista de referências alfabeticamente pelo sobrenome do autor.
-
-        Analise o texto abaixo e retorne APENAS o JSON estruturado.
+        1. O formato de saída deve ser OBRIGATORIAMENTE um JSON válido contendo uma lista de dicionários.
+        2. Cada dicionário na lista deve ter duas chaves: "tipo" e "texto".
+        3. A chave "tipo" pode ter um dos seguintes valores: "titulo_1", "titulo_2", "paragrafo", "citacao_longa", ou "referencia".
+        4. REGRA INSTITUCIONAL ETEC: Converta todas as chamadas de citação para o sistema autor-data. Ex: (SOBRENOME, ANO, p. XX).
+        5. Identifique citações com mais de 3 linhas e classifique-as como "citacao_longa", sem aspas.
+        6. Identifique a seção de referências bibliográficas. Cada entrada deve ser um item separado com "tipo": "referencia". Ordene alfabeticamente.
 
         --- INÍCIO DO TEXTO BRUTO ---
         {raw_text}
         --- FIM DO TEXTO BRUTO ---
         """
 
-        generation_config = genai.types.GenerationConfig(
-            temperature=0.1,
+        # 3. Trava de Segurança: Obriga o Google a responder EXATAMENTE em formato JSON
+        configuracao = genai.types.GenerationConfig(
+            temperature=0.1, # Temperatura baixa para a IA não "inventar" coisas
             response_mime_type="application/json"
         )
-
-        response = model.generate_content(prompt, generation_config=generation_config)
-        json_text = response.text.strip().replace("```json", "").replace("```", "")
-        return json.loads(json_text)
+        
+        # 4. Chama a geração de conteúdo
+        response = model.generate_content(prompt, generation_config=configuracao)
+        
+        # 5. Limpa a resposta (remove aspas do markdown caso a IA envie) para evitar quebra do JSON
+        json_limpo = response.text.strip().replace("```json", "").replace("```", "")
+        return json.loads(json_limpo)
 
     except json.JSONDecodeError:
-        st.error("Erro Crítico: A IA não retornou um JSON válido. Tente novamente.")
+        st.error("Erro Crítico: A IA não conseguiu estruturar o texto. Tente enviar um trecho menor.")
         return None
     except Exception as e:
-        st.error(f"Erro na comunicação com a API Gemini: {e}")
+        # Mostra exatamente qual modelo tentou usar antes de falhar
+        st.error(f"Erro na conexão com a IA ({modelo_final if 'modelo_final' in locals() else 'Desconhecido'}): {e}")
         return None
 
 def validate_references(structured_data):
