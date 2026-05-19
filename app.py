@@ -1,5 +1,5 @@
 # app.py
-# Autor: Assistente Especialista (Engenheiro Full-Stack, Especialista em IA, Normatizador ABNT/Etec, UX/UI Designer)
+# Autor: Assistente Especialista (Engenheiro Full-Stack, Specialist em IA, Normatizador ABNT/Etec, UX/UI Designer)
 # Descrição: Aplicação Web com Streamlit para formatar TCCs automaticamente usando a API Gemini.
 
 import streamlit as st
@@ -105,25 +105,38 @@ def get_structured_text_from_gemini(api_key: str, raw_text: str):
         model = genai.GenerativeModel(modelo_final)
         # -------------------------------
 
-        # 2. Prompt Completo com as Regras ABNT/Etec (VITAL PARA NÃO DAR ERRO)
+        # 2. NOVO PROMPT INTEGRADO COM MÁXIMO RIGOR DE BANCA EXAMINADORA
         prompt = f"""
-        Você é um assistente de formatação acadêmica rigoroso, especialista nas normas ABNT e nas diretrizes institucionais da Etec/Centro Paula Souza. 
-        Sua tarefa é converter o texto bruto fornecido em uma estrutura JSON perfeita.
+        Você é um assistente de formatação acadêmica com rigor de banca examinadora, especialista nas normas ABNT e nas diretrizes institucionais da Etec/Centro Paula Souza.
+        Sua tarefa é analisar o texto bruto fornecido e convertê-lo em uma estrutura JSON perfeita, corrigindo os desvios normativos.
 
         REGRAS DE CONVERSÃO OBRIGATÓRIAS:
-        1. Formato de saída: OBRIGATORIAMENTE um JSON válido (lista de dicionários contendo "tipo" e "texto").
-        2. Tipos permitidos: "titulo_1", "titulo_2", "paragrafo", "citacao_longa", "referencia".
-        3. CITAÇÕES NO TEXTO (AUTOR-DATA): Os nomes DENTRO dos parênteses devem estar 100% EM MAIÚSCULAS. Exemplo correto: (SCIELO, 2024) ou (SOBRENOME, 2023, p. 15). Errado: (SCiELO, 2024).
-        4. CITAÇÃO LONGA: Trechos copiados com mais de 3 linhas recebem o tipo "citacao_longa", remova as aspas se houver.
-        5. BIBLIOGRAFIA (CRÍTICO): Leia com extrema atenção o final do documento. EXTRAIA ABSOLUTAMENTE TODOS os itens listados (mesmo se estiverem em formato de tabela) e converta-os em "referencia". É estritamente proibido omitir qualquer autor ou obra listada na fonte original.
-        6. Ordene todas as referências da lista final em ordem alfabética.
+        1. FORMATO DE SAÍDA: OBRIGATORIAMENTE um JSON válido (uma lista de dicionários contendo as chaves "tipo" e "texto"). Não adicione nenhuma palavra antes ou depois do JSON.
+
+        2. HIERARQUIA E NUMERAÇÃO (NBR 6024): 
+           - Todo "titulo_1" deve receber indicação numérica progressiva começando por 1 (Ex: "1 A ARQUITETURA...").
+           - Todo "titulo_2" deve receber numeração secundária correspondente (Ex: "1.1 CONTEXTO HISTÓRICO...").
+           - Nunca deixe títulos sem numeração.
+
+        3. CITAÇÕES NO TEXTO (NBR 10520):
+           - Sistema autor-data rigoroso. Nomes de instituições ou autores dentro de parênteses devem estar 100% EM MAIÚSCULAS. Ex: (IDIS, 2024).
+           - Remova indicações genéricas de páginas (como ", p. 1") caso o texto bruto não especifique uma página real de citação direta literal.
+
+        4. SEÇÃO DE REFERÊNCIAS (CRÍTICO):
+           - Antes de listar as referências bibliográficas, você DEVE gerar obrigatoriamente um item com "tipo": "titulo_1" e "texto": "REFERÊNCIAS". Este item servirá de divisor formal no documento.
+
+        5. NORMATIZAÇÃO DA BIBLIOGRAFIA (NBR 6023):
+           - É TERMINANTEMENTE PROIBIDO inventar dados, usar mockups de textos repetidos como "Revista de Publicações", ou links falsos/genéricos como "spanishdict".
+           - Se o documento original for uma página da internet ou relatório, formate-o corretamente: AUTOR INSTITUCIONAL. Título do documento ou página. Disponível em: <URL original ou omitir se não houver>. Acesso em: [Data atual].
+           - Se a data de uma obra for desconhecida e não puder ser inferida de forma alguma, utilize a abreviatura [s.d.] entre colchetes.
+           - Extraia ABSOLUTAMENTE TODOS os autores citados e organize a lista final em ordem alfabética estrita.
 
         --- INÍCIO DO TEXTO BRUTO ---
         {raw_text}
         --- FIM DO TEXTO BRUTO ---
         """
 
-        # 3. Trava de Segurança: Temperatura 0.0 para zero omissão de dados
+        # 3. Trava de Segurança Otimizada: Temperatura 0.0 para zero omissão de dados
         configuracao = genai.types.GenerationConfig(
             temperature=0.0, 
             response_mime_type="application/json"
