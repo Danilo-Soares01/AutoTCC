@@ -1,5 +1,5 @@
 # app.py
-# Autor: Assistente Especialista (Engenheiro Full-Stack, Specialist em IA, Normatizador ABNT/Etec, UX/UI Designer)
+# Autor: Assistente Especialista (Engenheiro Full-Stack, Especialista em IA, Normatizador ABNT/Etec, UX/UI Designer)
 # Descrição: Aplicação Web com Streamlit para formatar TCCs automaticamente usando a API Gemini.
 
 import streamlit as st
@@ -105,7 +105,7 @@ def get_structured_text_from_gemini(api_key: str, raw_text: str):
         model = genai.GenerativeModel(modelo_final)
         # -------------------------------
 
-        # 2. NOVO PROMPT INTEGRADO COM MÁXIMO RIGOR DE BANCA EXAMINADORA
+        # 2. PROMPT DEFINITIVO (EQUILÍBRIO ENTRE RIGOR E PLACEHOLDERS)
         prompt = f"""
         Você é um assistente de formatação acadêmica com rigor de banca examinadora, especialista nas normas ABNT e nas diretrizes institucionais da Etec/Centro Paula Souza.
         Sua tarefa é analisar o texto bruto fornecido e convertê-lo em uma estrutura JSON perfeita, corrigindo os desvios normativos.
@@ -119,16 +119,18 @@ def get_structured_text_from_gemini(api_key: str, raw_text: str):
            - Nunca deixe títulos sem numeração.
 
         3. CITAÇÕES NO TEXTO (NBR 10520):
-           - Sistema autor-data rigoroso. Nomes de instituições ou autores dentro de parênteses devem estar 100% EM MAIÚSCULAS. Ex: (IDIS, 2024).
-           - Remova indicações genéricas de páginas (como ", p. 1") caso o texto bruto não especifique uma página real de citação direta literal.
+           - Sistema autor-data estrito, OBRIGANDO a indicação de página para seguir o rigor da instituição. O formato deve ser sempre: (AUTOR, ANO, p. XX).
+           - Nomes de instituições ou autores dentro de parênteses devem estar 100% EM MAIÚSCULAS. Exemplo: (IDIS, 2024, p. 1).
+           - Se a página exata não estiver explícita no texto bruto, utilize "p. 1" ou "p. [XX]" para preservar a estrutura visual exigida pela regra.
 
         4. SEÇÃO DE REFERÊNCIAS (CRÍTICO):
            - Antes de listar as referências bibliográficas, você DEVE gerar obrigatoriamente um item com "tipo": "titulo_1" e "texto": "REFERÊNCIAS". Este item servirá de divisor formal no documento.
 
         5. NORMATIZAÇÃO DA BIBLIOGRAFIA (NBR 6023):
-           - É TERMINANTEMENTE PROIBIDO inventar dados, usar mockups de textos repetidos como "Revista de Publicações", ou links falsos/genéricos como "spanishdict".
-           - Se o documento original for uma página da internet ou relatório, formate-o corretamente: AUTOR INSTITUCIONAL. Título do documento ou página. Disponível em: <URL original ou omitir se não houver>. Acesso em: [Data atual].
-           - Se a data de uma obra for desconhecida e não puder ser inferida de forma alguma, utilize a abreviatura [s.d.] entre colchetes.
+           - A estrutura de referências online ou relatórios DEVE conter o esqueleto completo: AUTOR. Título. Local: Publicadora, Ano. Disponível em: <URL>. Acesso em: [Data atual].
+           - É TERMINANTEMENTE PROIBIDO inventar dados falsos (como "Revista de Publicações" ou links do "spanishdict").
+           - SOLUÇÃO PARA DADOS FALTANTES: Se o texto bruto não informar o Local, a Publicadora ou o Link, NÃO omita a estrutura e NÃO invente. Utilize marcadores visuais entre colchetes para manter o esqueleto ABNT perfeito.
+           - Exemplo de como formatar quando faltam dados: INSTITUTO DE PESQUISA ECONÔMICA APLICADA (IPEA). Mapa das Organizações da Sociedade Civil 2024. [Local]: [Publicadora], 2024. Disponível em: <[Inserir URL original]>. Acesso em: [Data].
            - Extraia ABSOLUTAMENTE TODOS os autores citados e organize a lista final em ordem alfabética estrita.
 
         --- INÍCIO DO TEXTO BRUTO ---
@@ -160,6 +162,7 @@ def get_structured_text_from_gemini(api_key: str, raw_text: str):
 def validate_references(structured_data):
     cited_authors = set()
     text_body = " ".join([item['texto'] for item in structured_data if item['tipo'] != 'referencia'])
+    # Validador atualizado implicitamente - a regex lê bem "(IDIS, 2024, p. 1)" extraindo "IDIS" e "2024"
     matches = re.findall(r'\(([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ;\s]+),\s*\d{4}', text_body.upper())
     for match in matches:
         authors = [name.strip() for name in match.split(';')]
